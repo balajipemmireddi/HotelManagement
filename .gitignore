@@ -1,0 +1,19 @@
+# Ignore Environment Variables
+.env
+.env.local
+.env.*
+
+# Ignore Node Modules (Massive frontend folder)
+node_modules/
+dist/
+.vite/
+
+# Ignore Java/Spring Boot Build Folders
+target/
+*.class
+.idea/
+*.iml
+
+# Ignore Mac/Windows system files
+.DS_Store
+Thumbs.db
