@@ -375,4 +375,68 @@ public class BookingService {
         // Convert to DTO
         return bookingMapper.toResponseDTO(booking);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PHASE 8 — Booking Cancellation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * PUT /api/bookings/{id}/cancel — Cancel an existing booking.
+     *
+     * Business Rules:
+     * 1. Only PENDING or CONFIRMED bookings can be cancelled
+     * 2. User must own the booking
+     * 3. Updates status to CANCELLED
+     * 4. Records cancellation timestamp
+     * 5. Rooms are automatically released (availability query excludes CANCELLED bookings)
+     *
+     * @param bookingId Booking ID to cancel
+     * @param authenticatedUserId ID of the currently authenticated user
+     * @return BookingResponseDTO with updated status
+     * @throws ResourceNotFoundException if booking not found
+     * @throws com.Hotel.exception.UnauthorizedResourceAccessException if user doesn't own booking
+     * @throws IllegalStateException if booking cannot be cancelled
+     */
+    @Transactional
+    public BookingResponseDTO cancelBooking(Long bookingId, Long authenticatedUserId) {
+        log.info("Cancelling booking {} for user {}", bookingId, authenticatedUserId);
+
+        // Retrieve booking
+        Booking booking = bookingRepo.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Booking not found with id: " + bookingId));
+
+        // Authorization check: users can only cancel their own bookings
+        if (!booking.getUser().getId().equals(authenticatedUserId)) {
+            throw new com.Hotel.exception.UnauthorizedResourceAccessException(
+                    "You are not authorized to cancel this booking");
+        }
+
+        // Business rule: Only PENDING or CONFIRMED bookings can be cancelled
+        if (booking.getStatus() == Booking.BookingStatus.CANCELLED) {
+            throw new IllegalStateException("Booking is already cancelled");
+        }
+
+        if (booking.getStatus() == Booking.BookingStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed booking");
+        }
+
+        // Update booking status
+        booking.setStatus(Booking.BookingStatus.CANCELLED);
+        booking.setCancelledAt(LocalDateTime.now());
+
+        // Note: Rooms are automatically released because the availability query
+        // in RoomRepo.findAvailableRooms() excludes bookings with CANCELLED status.
+        // No need to manually delete BookingRoom records.
+
+        booking = bookingRepo.save(booking);
+
+        log.info("Booking {} cancelled successfully. Rooms released for dates {} to {}",
+                booking.getBookingReference(),
+                booking.getCheckInDate(),
+                booking.getCheckOutDate());
+
+        // Convert to DTO
+        return bookingMapper.toResponseDTO(booking);
+    }
 }

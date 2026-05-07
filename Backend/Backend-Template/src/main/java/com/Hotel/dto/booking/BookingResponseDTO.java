@@ -42,6 +42,7 @@ public class BookingResponseDTO {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime cancelledAt; // PHASE 8: Cancellation timestamp
 
     private List<BookedRoomDTO> bookedRooms;
 

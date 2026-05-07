@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,9 +23,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * PHASE 5-6 — Booking Controller.
+ * PHASE 5-6-8 — Booking Controller.
  *
- * Handles booking creation, retrieval, and user history.
+ * Handles booking creation, retrieval, user history, and cancellation.
  * Requires authentication (JWT token).
  */
 @RestController
@@ -159,6 +160,46 @@ public class BookingController {
         log.info("User {} requesting booking details for booking {}", authenticatedUserId, id);
 
         BookingResponseDTO booking = bookingService.getBookingById(id, authenticatedUserId);
+
+        return ResponseEntity.ok(booking);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PHASE 8 — Booking Cancellation Endpoint
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * PUT /api/bookings/{id}/cancel — Cancel an existing booking.
+     *
+     * Cancels a booking and releases the associated rooms.
+     * Only PENDING or CONFIRMED bookings can be cancelled.
+     * Users can only cancel their own bookings.
+     *
+     * Response:
+     * {
+     *   "id": 1,
+     *   "bookingReference": "BK-20260507-A3F9",
+     *   "status": "CANCELLED",
+     *   "cancelledAt": "2026-05-07T14:25:00",
+     *   ...
+     * }
+     *
+     * @param id Booking ID to cancel
+     * @param authentication Spring Security authentication
+     * @return BookingResponseDTO with updated status
+     */
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<BookingResponseDTO> cancelBooking(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        // Extract authenticated user ID
+        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        Long authenticatedUserId = userPrincipal.getId();
+
+        log.info("User {} requesting cancellation for booking {}", authenticatedUserId, id);
+
+        BookingResponseDTO booking = bookingService.cancelBooking(id, authenticatedUserId);
 
         return ResponseEntity.ok(booking);
     }
