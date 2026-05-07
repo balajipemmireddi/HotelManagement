@@ -18,8 +18,9 @@ import HotelDetailsPage from "./pages/HotelDetailsPage";
 // ── Phase 6 ──
 import BookingPage from "./pages/BookingPage";
 
-// ── Phase 7 stub (will be replaced as phase completes) ──
-// import BookingConfirmPage from "./pages/BookingConfirmPage";
+// ── Phase 7 ──
+import BookingConfirmPage  from "./pages/BookingConfirmPage";
+import BookingSuccessPage  from "./pages/BookingSuccessPage";
 
 // Temporary stub component for routes not yet implemented
 function ComingSoon({ page }) {
@@ -63,7 +64,15 @@ export default function App() {
             path="/booking/confirm"
             element={
               <ProtectedRoute>
-                <ComingSoon page="Payment & Confirmation" />
+                <BookingConfirmPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/booking/success"
+            element={
+              <ProtectedRoute>
+                <BookingSuccessPage />
               </ProtectedRoute>
             }
           />
