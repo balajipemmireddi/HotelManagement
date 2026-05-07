@@ -52,6 +52,9 @@ public class SecurityConfig {
                         // Public hotel browsing — no token required
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/hotels", "/api/hotels/**")
                         .permitAll()
+                        // Public room category browsing — frontend Room Selection page
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/room-categories/**")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())
 
