@@ -48,6 +48,7 @@ public class BookingService {
     private final UserRepo userRepo;
     private final AvailabilityService availabilityService;
     private final BookingMapper bookingMapper;
+    private final DiscountService discountService;
 
     private final Random random = new Random();
 
@@ -139,6 +140,43 @@ public class BookingService {
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        // 3.1. PHASE 7: Apply discount code if provided
+        // ─────────────────────────────────────────────────────────────────────
+        double discountAmount = 0.0;
+        String appliedDiscountCode = null;
+
+        if (request.getDiscountCode() != null && !request.getDiscountCode().trim().isEmpty()) {
+            String code = request.getDiscountCode().trim();
+            log.info("Applying discount code: {}", code);
+
+            com.Hotel.entity.DiscountCode discountCode = discountService.getDiscountCodeByCode(code);
+
+            if (discountCode != null && discountCode.isValid()) {
+                // Check minimum booking amount
+                if (discountCode.getMinBookingAmount() == null ||
+                    totalAmount >= discountCode.getMinBookingAmount()) {
+
+                    discountAmount = discountCode.calculateDiscount(totalAmount);
+                    appliedDiscountCode = discountCode.getCode();
+
+                    log.info("Discount code {} applied. Discount: ${}", code, discountAmount);
+                } else {
+                    log.warn("Booking amount {} below minimum {} for code: {}",
+                            totalAmount, discountCode.getMinBookingAmount(), code);
+                    throw new IllegalArgumentException(
+                            String.format("Minimum booking amount of $%.2f required for discount code %s",
+                                    discountCode.getMinBookingAmount(), code)
+                    );
+                }
+            } else {
+                log.warn("Invalid or expired discount code: {}", code);
+                throw new IllegalArgumentException("Invalid or expired discount code: " + code);
+            }
+        }
+
+        double finalAmount = totalAmount - discountAmount;
+
+        // ─────────────────────────────────────────────────────────────────────
         // 4. Create Booking entity
         // ─────────────────────────────────────────────────────────────────────
         String bookingReference = generateBookingReference();
@@ -151,8 +189,8 @@ public class BookingService {
                 .checkOutDate(request.getCheckOutDate())
                 .totalNights(totalNights)
                 .totalAmount(totalAmount)
-                .discountAmount(0.0) // Phase 7 will implement discount logic
-                .finalAmount(totalAmount)
+                .discountAmount(discountAmount)
+                .finalAmount(finalAmount)
                 .status(Booking.BookingStatus.PENDING)
                 .paymentStatus(Booking.PaymentStatus.PENDING)
                 .specialRequests(request.getSpecialRequests())
@@ -160,6 +198,13 @@ public class BookingService {
 
         booking = bookingRepo.save(booking);
         log.info("Booking created with reference: {}", bookingReference);
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 4.1. PHASE 7: Increment discount code usage if applied
+        // ─────────────────────────────────────────────────────────────────────
+        if (appliedDiscountCode != null) {
+            discountService.applyDiscountCode(appliedDiscountCode);
+        }
 
         // ─────────────────────────────────────────────────────────────────────
         // 5. Create BookingRoom entries (lock specific rooms)

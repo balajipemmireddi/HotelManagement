@@ -44,6 +44,9 @@ public class BookingRequestDTO {
 
     private String specialRequests;
 
+    // PHASE 7: Optional discount code
+    private String discountCode;
+
     /**
      * Nested DTO for each room category request.
      * Example: { categoryId: 3, quantity: 2 } → book 2 rooms from category 3.
