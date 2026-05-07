@@ -31,10 +31,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * PHASE 5 — Booking Service.
+ * PHASE 5-6 — Booking Service.
  *
- * Handles the critical booking creation process with atomic transactions.
- * Ensures rooms are locked and booking is created or fails entirely.
+ * Handles booking creation, retrieval, and user history.
+ * Ensures atomic transactions and proper authorization.
  */
 @Service
 @RequiredArgsConstructor
@@ -262,5 +262,72 @@ public class BookingService {
             this.category = category;
             this.roomIds = roomIds;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PHASE 6 — Booking Retrieval Methods
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/bookings/user/{userId} — Retrieve all bookings for a user.
+     *
+     * Returns all bookings (past, upcoming, cancelled) ordered by creation date.
+     * Enforces authorization: users can only view their own bookings.
+     *
+     * @param userId User ID whose bookings to retrieve
+     * @param authenticatedUserId ID of the currently authenticated user
+     * @return List of BookingResponseDTO
+     * @throws com.Hotel.exception.UnauthorizedResourceAccessException if user tries to access another user's bookings
+     */
+    public List<BookingResponseDTO> getUserBookings(Long userId, Long authenticatedUserId) {
+        log.info("Retrieving bookings for user {}", userId);
+
+        // Authorization check: users can only view their own bookings
+        if (!userId.equals(authenticatedUserId)) {
+            throw new com.Hotel.exception.UnauthorizedResourceAccessException(
+                    "You are not authorized to view bookings for user " + userId);
+        }
+
+        // Retrieve all bookings for the user
+        List<Booking> bookings = bookingRepo.findByUserId(userId);
+
+        log.info("Found {} bookings for user {}", bookings.size(), userId);
+
+        // Convert to DTOs
+        return bookings.stream()
+                .map(bookingMapper::toResponseDTO)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * GET /api/bookings/{id} — Retrieve full details of a specific booking.
+     *
+     * Returns complete booking information including all rooms and pricing.
+     * Enforces authorization: users can only view their own bookings.
+     *
+     * @param bookingId Booking ID to retrieve
+     * @param authenticatedUserId ID of the currently authenticated user
+     * @return BookingResponseDTO with full details
+     * @throws ResourceNotFoundException if booking not found
+     * @throws com.Hotel.exception.UnauthorizedResourceAccessException if user tries to access another user's booking
+     */
+    public BookingResponseDTO getBookingById(Long bookingId, Long authenticatedUserId) {
+        log.info("Retrieving booking details for booking {}", bookingId);
+
+        // Retrieve booking
+        Booking booking = bookingRepo.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Booking not found with id: " + bookingId));
+
+        // Authorization check: users can only view their own bookings
+        if (!booking.getUser().getId().equals(authenticatedUserId)) {
+            throw new com.Hotel.exception.UnauthorizedResourceAccessException(
+                    "You are not authorized to view this booking");
+        }
+
+        log.info("Retrieved booking {} for user {}", booking.getBookingReference(), authenticatedUserId);
+
+        // Convert to DTO
+        return bookingMapper.toResponseDTO(booking);
     }
 }

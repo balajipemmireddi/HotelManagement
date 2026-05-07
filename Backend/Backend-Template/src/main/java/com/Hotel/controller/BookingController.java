@@ -1,8 +1,12 @@
 package com.Hotel.controller;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,9 +22,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * PHASE 5 — Booking Controller.
+ * PHASE 5-6 — Booking Controller.
  *
- * Handles booking creation endpoint.
+ * Handles booking creation, retrieval, and user history.
  * Requires authentication (JWT token).
  */
 @RestController
@@ -73,5 +77,89 @@ public class BookingController {
         BookingResponseDTO response = bookingService.createBooking(request, userId);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PHASE 6 — Booking Retrieval Endpoints
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/bookings/user/{userId} — List all bookings for a user.
+     *
+     * Returns all bookings (past, upcoming, cancelled) ordered by creation date.
+     * Users can only view their own bookings (enforced by service layer).
+     *
+     * Response:
+     * [
+     *   {
+     *     "bookingReference": "BK-20260507-A3F9",
+     *     "status": "CONFIRMED",
+     *     "checkInDate": "2026-06-15",
+     *     "hotelName": "Grand Plaza Hotel",
+     *     ...
+     *   }
+     * ]
+     *
+     * @param userId User ID from path
+     * @param authentication Spring Security authentication
+     * @return List of BookingResponseDTO
+     */
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<BookingResponseDTO>> getUserBookings(
+            @PathVariable Long userId,
+            Authentication authentication) {
+
+        // Extract authenticated user ID
+        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        Long authenticatedUserId = userPrincipal.getId();
+
+        log.info("User {} requesting bookings for user {}", authenticatedUserId, userId);
+
+        List<BookingResponseDTO> bookings = bookingService.getUserBookings(userId, authenticatedUserId);
+
+        return ResponseEntity.ok(bookings);
+    }
+
+    /**
+     * GET /api/bookings/{id} — Get full details of a specific booking.
+     *
+     * Returns complete booking information including all rooms and pricing.
+     * Users can only view their own bookings (enforced by service layer).
+     *
+     * Response:
+     * {
+     *   "id": 1,
+     *   "bookingReference": "BK-20260507-A3F9",
+     *   "status": "CONFIRMED",
+     *   "hotelName": "Grand Plaza Hotel",
+     *   "bookedRooms": [
+     *     {
+     *       "roomNumber": "201",
+     *       "categoryName": "Deluxe King",
+     *       "pricePerNight": 150.00,
+     *       "subtotal": 450.00
+     *     }
+     *   ],
+     *   ...
+     * }
+     *
+     * @param id Booking ID
+     * @param authentication Spring Security authentication
+     * @return BookingResponseDTO with full details
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<BookingResponseDTO> getBookingById(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        // Extract authenticated user ID
+        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        Long authenticatedUserId = userPrincipal.getId();
+
+        log.info("User {} requesting booking details for booking {}", authenticatedUserId, id);
+
+        BookingResponseDTO booking = bookingService.getBookingById(id, authenticatedUserId);
+
+        return ResponseEntity.ok(booking);
     }
 }
