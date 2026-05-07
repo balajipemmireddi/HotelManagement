@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
 import { loginUser } from "../services/UserService";
-import { jwtDecode } from "jwt-decode";
+import { saveAuthData } from "../utils/authUtil";
 import { Container, Card, Form, Button, Toast } from "react-bootstrap";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { AuthContext } from "../context/authContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useContext(AuthContext);
 
   const [credentials, setCredentials] = useState({
     email: "",
@@ -29,19 +31,11 @@ export default function Login() {
         return;
       }
 
-      // Decode JWT (email + role)
-      const decoded = jwtDecode(token);
+      // Persist token + decoded user, then sync AuthContext
+      saveAuthData({ token });
+      login();
 
-      localStorage.setItem("token", token);
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          email: decoded.sub,
-          role: decoded.role
-        })
-      );
-
-      showToast("Login Successful ", "success");
+      showToast("Login Successful", "success");
 
       setTimeout(() => {
         navigate("/dashboard");
@@ -84,6 +78,13 @@ export default function Login() {
             Login
           </Button>
         </Form>
+
+        <p className="text-center text-muted small mt-3 mb-0">
+          Don't have an account?{" "}
+          <Link to="/signup" className="text-decoration-none">
+            Sign up
+          </Link>
+        </p>
       </Card>
 
       {/* Toast */}
