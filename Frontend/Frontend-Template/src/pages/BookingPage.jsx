@@ -133,7 +133,7 @@ export default function BookingPage() {
 
           {/* ── Right: Booking Summary (sticky) ── */}
           <Col xs={12} lg={5}>
-            <div style={{ position: "sticky", top: "80px" }}>
+            <div style={{ position: "sticky", top: "var(--sticky-top)" }}>
               <BookingSummary
                 hotelId={hotelId}
                 rooms={rooms}

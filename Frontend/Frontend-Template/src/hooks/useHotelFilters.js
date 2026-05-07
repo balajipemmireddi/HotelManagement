@@ -1,8 +1,12 @@
-import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
 /**
- * useHotelFilters — manages all hotel filter state via URL query params.
+ * useHotelFilters
+ *
+ * This hook reads and writes all hotel filter values directly from/to
+ * the browser's URL query string (e.g. ?location=Paris&stars=4,5).
+ *
+ * Why the URL? So filters survive a page refresh and can be shared as a link.
  *
  * URL params used:
  *   location  — text search (name or city)
@@ -17,93 +21,110 @@ import { useSearchParams } from "react-router-dom";
 export function useHotelFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ── Read helpers ──────────────────────────────────────
-  const get = (key, fallback = "") => searchParams.get(key) ?? fallback;
+  // ── Read current filter values from the URL ───────────
+  // Helper: get a single param, with an optional fallback value
+  function getParam(key, fallback = "") {
+    return searchParams.get(key) ?? fallback;
+  }
 
-  const getSet = (key) => {
+  // Helper: get a comma-separated param as a Set (e.g. "wifi,pool" → Set{"wifi","pool"})
+  function getSetParam(key) {
     const raw = searchParams.get(key);
     if (!raw) return new Set();
     return new Set(raw.split(",").filter(Boolean));
-  };
+  }
 
-  // ── Current filter values ─────────────────────────────
-  const filters = useMemo(() => ({
-    // SearchBar fields
-    location: get("location"),
-    checkIn:  get("checkIn"),
-    checkOut: get("checkOut"),
-    guests:   get("guests", "1"),
+  // Build the current filters object from the URL
+  const filters = {
+    location:   getParam("location"),
+    checkIn:    getParam("checkIn"),
+    checkOut:   getParam("checkOut"),
+    guests:     getParam("guests", "1"),
+    priceRange: getParam("price", "0-Infinity"),
+    sort:       getParam("sort", "default"),
 
-    // Sidebar fields
-    priceRange: get("price", "0-Infinity"),
-    stars:      new Set(
+    // Stars come in as "4,5" — convert to a Set of numbers
+    stars: new Set(
       (searchParams.get("stars") ?? "")
         .split(",")
         .filter(Boolean)
         .map(Number)
     ),
-    amenities: getSet("amenities"),
 
-    // Sort
-    sort: get("sort", "default"),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [searchParams]);
+    // Amenities come in as "wifi,pool" — convert to a Set of strings
+    amenities: getSetParam("amenities"),
+  };
 
-  // ── Write helper — merges a partial update into current params ──
-  const setFilter = useCallback((field, value) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
+  // ── Write a single filter value back to the URL ───────
+  function setFilter(field, value) {
+    // We copy the current params so we don't lose other filters
+    const next = new URLSearchParams(searchParams);
 
-      if (field === "stars") {
-        // value is a Set<number>
-        const arr = [...value];
-        arr.length ? next.set("stars", arr.join(",")) : next.delete("stars");
-
-      } else if (field === "amenities") {
-        // value is a Set<string>
-        const arr = [...value];
-        arr.length ? next.set("amenities", arr.join(",")) : next.delete("amenities");
-
-      } else if (field === "priceRange") {
-        value === "0-Infinity"
-          ? next.delete("price")
-          : next.set("price", value);
-
-      } else if (value === "" || value === null || value === undefined) {
-        next.delete(field);
-
+    if (field === "stars") {
+      // value is a Set<number> — convert back to "4,5" string
+      const arr = [...value];
+      if (arr.length > 0) {
+        next.set("stars", arr.join(","));
       } else {
-        next.set(field, String(value));
+        next.delete("stars");
       }
 
-      return next;
-    }, { replace: true });
-  }, [setSearchParams]);
+    } else if (field === "amenities") {
+      // value is a Set<string> — convert back to "wifi,pool" string
+      const arr = [...value];
+      if (arr.length > 0) {
+        next.set("amenities", arr.join(","));
+      } else {
+        next.delete("amenities");
+      }
 
-  // ── Bulk update for SearchBar (apply all at once) ─────
-  const applySearch = useCallback((searchValues) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      Object.entries(searchValues).forEach(([k, v]) => {
-        v ? next.set(k, String(v)) : next.delete(k);
-      });
-      return next;
-    }, { replace: true });
-  }, [setSearchParams]);
+    } else if (field === "priceRange") {
+      // "0-Infinity" means no price filter — remove the param
+      if (value === "0-Infinity") {
+        next.delete("price");
+      } else {
+        next.set("price", value);
+      }
 
-  // ── Clear all filters ─────────────────────────────────
-  const clearAll = useCallback(() => {
+    } else if (value === "" || value === null || value === undefined) {
+      // Empty value means the filter was cleared — remove the param
+      next.delete(field);
+
+    } else {
+      next.set(field, String(value));
+    }
+
+    // replace: true means the back button won't step through every filter change
+    setSearchParams(next, { replace: true });
+  }
+
+  // ── Apply all SearchBar fields at once ────────────────
+  // Called when the user clicks the Search button
+  function applySearch(searchValues) {
+    const next = new URLSearchParams(searchParams);
+
+    Object.entries(searchValues).forEach(([key, value]) => {
+      if (value) {
+        next.set(key, String(value));
+      } else {
+        next.delete(key);
+      }
+    });
+
+    setSearchParams(next, { replace: true });
+  }
+
+  // ── Clear every filter at once ────────────────────────
+  function clearAll() {
     setSearchParams({}, { replace: true });
-  }, [setSearchParams]);
+  }
 
-  // ── Active filter count (for badge) ──────────────────
-  const activeCount = useMemo(() => {
-    let n = 0;
-    if (filters.priceRange !== "0-Infinity") n++;
-    if (filters.stars.size > 0) n++;
-    if (filters.amenities.size > 0) n++;
-    return n;
-  }, [filters]);
+  // ── Count how many sidebar filters are active ─────────
+  // Used to show the red badge on the Filters button
+  let activeCount = 0;
+  if (filters.priceRange !== "0-Infinity") activeCount++;
+  if (filters.stars.size > 0) activeCount++;
+  if (filters.amenities.size > 0) activeCount++;
 
   return { filters, setFilter, applySearch, clearAll, activeCount };
 }

@@ -1,26 +1,7 @@
 import { useState } from "react";
 import { Form, Button, Row, Col, Card } from "react-bootstrap";
 
-// Validation rules
-const VALIDATORS = {
-  firstName: (v) => v.trim().length >= 2 ? null : "First name must be at least 2 characters.",
-  lastName:  (v) => v.trim().length >= 2 ? null : "Last name must be at least 2 characters.",
-  email:     (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? null : "Enter a valid email address.",
-  phone:     (v) => /^\+?[\d\s\-()]{7,15}$/.test(v.trim()) ? null : "Enter a valid phone number.",
-  country:   (v) => v.trim().length > 0 ? null : "Please select your country.",
-  specialRequests: () => null, // optional — always valid
-};
-
-const INITIAL = {
-  firstName:       "",
-  lastName:        "",
-  email:           "",
-  phone:           "",
-  country:         "",
-  specialRequests: "",
-};
-
-// Common countries list
+// List of countries shown in the dropdown
 const COUNTRIES = [
   "United States", "United Kingdom", "Canada", "Australia", "Germany",
   "France", "Japan", "India", "Brazil", "UAE", "Singapore", "South Africa",
@@ -28,70 +9,116 @@ const COUNTRIES = [
   "Mexico", "Argentina", "Turkey", "Thailand", "Indonesia", "Other",
 ];
 
+// ── Plain validation functions — one per field ────────
+// Each returns an error message string, or an empty string if the value is valid.
+
+function validateFirstName(value) {
+  if (value.trim().length < 2) {
+    return "First name must be at least 2 characters.";
+  }
+  return "";
+}
+
+function validateLastName(value) {
+  if (value.trim().length < 2) {
+    return "Last name must be at least 2 characters.";
+  }
+  return "";
+}
+
+function validateEmail(value) {
+  // Simple email format check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(value.trim())) {
+    return "Enter a valid email address.";
+  }
+  return "";
+}
+
+function validatePhone(value) {
+  // Allows digits, spaces, dashes, parentheses, and an optional leading +
+  const phoneRegex = /^\+?[\d\s\-()]{7,15}$/;
+  if (!phoneRegex.test(value.trim())) {
+    return "Enter a valid phone number.";
+  }
+  return "";
+}
+
+function validateCountry(value) {
+  if (value.trim().length === 0) {
+    return "Please select your country.";
+  }
+  return "";
+}
+
+// specialRequests is optional — always valid, no function needed
+
 /**
  * GuestDetailsForm — Step 1 of the booking wizard.
  *
  * Props:
- *   initialValues : object (pre-fill from AuthContext user if available)
- *   onSubmit      : (guestData) => void
+ *   initialValues : object  — pre-fills the form (e.g. email from AuthContext)
+ *   onSubmit      : (guestData) => void  — called when the form passes validation
  */
 export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
-  const [values, setValues] = useState({ ...INITIAL, ...initialValues });
-  const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setValues((prev) => ({ ...prev, [name]: value }));
-    // Clear error on change if field was already touched
-    if (touched[name]) {
-      const err = VALIDATORS[name]?.(value);
-      setErrors((prev) => ({ ...prev, [name]: err }));
-    }
-  };
+  // ── Form field values ─────────────────────────────────
+  const [firstName,       setFirstName]       = useState(initialValues.firstName       || "");
+  const [lastName,        setLastName]        = useState(initialValues.lastName        || "");
+  const [email,           setEmail]           = useState(initialValues.email           || "");
+  const [phone,           setPhone]           = useState(initialValues.phone           || "");
+  const [country,         setCountry]         = useState(initialValues.country         || "");
+  const [specialRequests, setSpecialRequests] = useState(initialValues.specialRequests || "");
 
-  const handleBlur = (e) => {
-    const { name, value } = e.target;
-    setTouched((prev) => ({ ...prev, [name]: true }));
-    const err = VALIDATORS[name]?.(value);
-    setErrors((prev) => ({ ...prev, [name]: err }));
-  };
+  // ── Error messages — one per field ───────────────────
+  // Empty string means no error. We only show errors after the user has touched a field.
+  const [firstNameError, setFirstNameError] = useState("");
+  const [lastNameError,  setLastNameError]  = useState("");
+  const [emailError,     setEmailError]     = useState("");
+  const [phoneError,     setPhoneError]     = useState("");
+  const [countryError,   setCountryError]   = useState("");
 
-  const validate = () => {
-    const newErrors = {};
-    let valid = true;
-    Object.keys(VALIDATORS).forEach((field) => {
-      const err = VALIDATORS[field](values[field] ?? "");
-      if (err) {
-        newErrors[field] = err;
-        valid = false;
-      }
-    });
-    setErrors(newErrors);
-    // Mark all fields as touched so errors show
-    setTouched(Object.fromEntries(Object.keys(VALIDATORS).map((k) => [k, true])));
-    return valid;
-  };
+  // ── Validate all fields at once (called on form submit) ──
+  // Returns true if everything is valid, false if any field has an error.
+  function validateAll() {
+    const e1 = validateFirstName(firstName);
+    const e2 = validateLastName(lastName);
+    const e3 = validateEmail(email);
+    const e4 = validatePhone(phone);
+    const e5 = validateCountry(country);
 
-  const handleSubmit = (e) => {
+    // Show all errors at once so the user can see everything that needs fixing
+    setFirstNameError(e1);
+    setLastNameError(e2);
+    setEmailError(e3);
+    setPhoneError(e4);
+    setCountryError(e5);
+
+    // If all error strings are empty, the form is valid
+    return e1 === "" && e2 === "" && e3 === "" && e4 === "" && e5 === "";
+  }
+
+  // ── Handle form submit ────────────────────────────────
+  function handleSubmit(e) {
     e.preventDefault();
-    if (validate()) {
-      onSubmit(values);
-    }
-  };
 
-  // Helper: show error only if field was touched
-  const fieldError = (name) => touched[name] && errors[name];
-  const isValid    = (name) => touched[name] && !errors[name] && values[name];
+    // Run validation — if anything fails, stop here (errors are already shown)
+    const isValid = validateAll();
+    if (!isValid) return;
+
+    // All fields are valid — pass the data up to the parent (BookingPage)
+    onSubmit({ firstName, lastName, email, phone, country, specialRequests });
+  }
 
   return (
     <Form noValidate onSubmit={handleSubmit}>
+
+      {/* ── Guest Information Card ── */}
       <Card className="border-0 shadow-sm p-3 mb-3" style={{ borderRadius: "10px" }}>
-        <h6 className="fw-bold mb-3">
-          👤 Primary Guest Information
-        </h6>
+        <h6 className="fw-bold mb-3">👤 Primary Guest Information</h6>
 
         <Row className="g-3">
+
           {/* First Name */}
           <Col xs={12} sm={6}>
             <Form.Group>
@@ -101,14 +128,14 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
               <Form.Control
                 name="firstName"
                 placeholder="John"
-                value={values.firstName}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                isInvalid={!!fieldError("firstName")}
-                isValid={!!isValid("firstName")}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                onBlur={() => setFirstNameError(validateFirstName(firstName))}
+                isInvalid={firstNameError !== ""}
+                isValid={firstNameError === "" && firstName !== ""}
               />
               <Form.Control.Feedback type="invalid">
-                {errors.firstName}
+                {firstNameError}
               </Form.Control.Feedback>
             </Form.Group>
           </Col>
@@ -122,14 +149,14 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
               <Form.Control
                 name="lastName"
                 placeholder="Doe"
-                value={values.lastName}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                isInvalid={!!fieldError("lastName")}
-                isValid={!!isValid("lastName")}
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                onBlur={() => setLastNameError(validateLastName(lastName))}
+                isInvalid={lastNameError !== ""}
+                isValid={lastNameError === "" && lastName !== ""}
               />
               <Form.Control.Feedback type="invalid">
-                {errors.lastName}
+                {lastNameError}
               </Form.Control.Feedback>
             </Form.Group>
           </Col>
@@ -144,14 +171,14 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
                 type="email"
                 name="email"
                 placeholder="john@example.com"
-                value={values.email}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                isInvalid={!!fieldError("email")}
-                isValid={!!isValid("email")}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setEmailError(validateEmail(email))}
+                isInvalid={emailError !== ""}
+                isValid={emailError === "" && email !== ""}
               />
               <Form.Control.Feedback type="invalid">
-                {errors.email}
+                {emailError}
               </Form.Control.Feedback>
               <Form.Text className="text-muted" style={{ fontSize: "0.75rem" }}>
                 Booking confirmation will be sent here.
@@ -169,14 +196,14 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
                 type="tel"
                 name="phone"
                 placeholder="+1 555 000 0000"
-                value={values.phone}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                isInvalid={!!fieldError("phone")}
-                isValid={!!isValid("phone")}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={() => setPhoneError(validatePhone(phone))}
+                isInvalid={phoneError !== ""}
+                isValid={phoneError === "" && phone !== ""}
               />
               <Form.Control.Feedback type="invalid">
-                {errors.phone}
+                {phoneError}
               </Form.Control.Feedback>
             </Form.Group>
           </Col>
@@ -189,11 +216,11 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
               </Form.Label>
               <Form.Select
                 name="country"
-                value={values.country}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                isInvalid={!!fieldError("country")}
-                isValid={!!isValid("country")}
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                onBlur={() => setCountryError(validateCountry(country))}
+                isInvalid={countryError !== ""}
+                isValid={countryError === "" && country !== ""}
               >
                 <option value="">Select country...</option>
                 {COUNTRIES.map((c) => (
@@ -201,14 +228,15 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
                 ))}
               </Form.Select>
               <Form.Control.Feedback type="invalid">
-                {errors.country}
+                {countryError}
               </Form.Control.Feedback>
             </Form.Group>
           </Col>
+
         </Row>
       </Card>
 
-      {/* Special Requests */}
+      {/* ── Special Requests Card ── */}
       <Card className="border-0 shadow-sm p-3 mb-4" style={{ borderRadius: "10px" }}>
         <h6 className="fw-bold mb-3">
           📝 Special Requests <span className="text-muted fw-normal">(optional)</span>
@@ -219,8 +247,8 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
             name="specialRequests"
             rows={3}
             placeholder="Early check-in, high floor, extra pillows, dietary requirements..."
-            value={values.specialRequests}
-            onChange={handleChange}
+            value={specialRequests}
+            onChange={(e) => setSpecialRequests(e.target.value)}
             style={{ resize: "none" }}
           />
           <Form.Text className="text-muted" style={{ fontSize: "0.75rem" }}>
@@ -229,9 +257,11 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
         </Form.Group>
       </Card>
 
-      {/* Policies */}
-      <Card className="border-0 shadow-sm p-3 mb-4"
-            style={{ borderRadius: "10px", backgroundColor: "#f8f9fa" }}>
+      {/* ── Booking Policies Card ── */}
+      <Card
+        className="border-0 shadow-sm p-3 mb-4"
+        style={{ borderRadius: "10px", backgroundColor: "#f8f9fa" }}
+      >
         <h6 className="fw-bold mb-2">📋 Booking Policies</h6>
         <ul className="list-unstyled small text-muted mb-0">
           <li className="mb-1">✓ Free cancellation up to 24 hours before check-in</li>
@@ -241,7 +271,7 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
         </ul>
       </Card>
 
-      {/* Submit */}
+      {/* ── Submit ── */}
       <div className="d-flex justify-content-between align-items-center">
         <p className="text-muted small mb-0">
           <span className="text-danger">*</span> Required fields
@@ -254,6 +284,7 @@ export default function GuestDetailsForm({ initialValues = {}, onSubmit }) {
           Continue to Payment →
         </Button>
       </div>
+
     </Form>
   );
 }

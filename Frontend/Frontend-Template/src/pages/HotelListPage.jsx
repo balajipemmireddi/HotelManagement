@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Container, Row, Col, Form, Button,
-  Badge, Spinner, Alert, Offcanvas, Pagination,
+  Badge, Alert, Offcanvas, Pagination,
 } from "react-bootstrap";
-import HotelCard    from "../components/HotelCard";
-import SearchBar    from "../components/SearchBar";
-import FilterSidebar from "../components/FilterSidebar";
+import HotelCard         from "../components/HotelCard";
+import HotelCardSkeleton from "../components/HotelCardSkeleton";
+import SearchBar         from "../components/SearchBar";
+import FilterSidebar     from "../components/FilterSidebar";
+import AppToast          from "../components/AppToast";
 import { useHotelFilters } from "../hooks/useHotelFilters";
+import { useToast }        from "../hooks/useToast";
 import { searchHotels }    from "../services/HotelService";
 
 const PAGE_SIZE = 9;
@@ -21,6 +24,7 @@ const SORT_OPTIONS = [
 
 export default function HotelListPage() {
   const { filters, setFilter, applySearch, clearAll, activeCount } = useHotelFilters();
+  const { toast, showToast, hideToast } = useToast();
 
   // ── API state ─────────────────────────────────────────
   const [hotels,      setHotels]      = useState([]);
@@ -53,6 +57,7 @@ export default function HotelListPage() {
       setCurrentPage(result.number);
     } catch (err) {
       setError(err.message || "Failed to load hotels.");
+      showToast(err.message || "Failed to load hotels.", "danger");
     } finally {
       setLoading(false);
     }
@@ -201,12 +206,15 @@ export default function HotelListPage() {
               </Alert>
             )}
 
-            {/* Loading */}
+            {/* Loading — skeleton cards */}
             {loading ? (
-              <div className="text-center py-5">
-                <Spinner animation="border" variant="secondary" />
-                <p className="text-muted mt-3 small">Searching hotels...</p>
-              </div>
+              <Row className="g-4 mb-4">
+                {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                  <Col key={i} xs={12} sm={6} xl={4}>
+                    <HotelCardSkeleton />
+                  </Col>
+                ))}
+              </Row>
 
             /* Empty */
             ) : hotels.length === 0 ? (
@@ -265,6 +273,8 @@ export default function HotelListPage() {
           </div>
         </Offcanvas.Body>
       </Offcanvas>
+
+      <AppToast toast={toast} onClose={hideToast} />
     </div>
   );
 }

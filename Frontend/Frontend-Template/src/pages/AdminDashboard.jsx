@@ -1,20 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Container, Row, Col, Card, Table, Badge,
-  Button, Spinner, Alert, Toast, ToastContainer,
-  Modal,
+  Button, Spinner, Alert, Modal,
 } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import {
-  adminGetAllHotels,
-  adminCreateHotel,
-  adminUpdateHotel,
-  adminDeleteHotel,
-  adminGetRevenue,
-  adminGetOccupancy,
+  adminGetAllHotels, adminCreateHotel, adminUpdateHotel,
+  adminDeleteHotel, adminGetRevenue, adminGetOccupancy,
 } from "../services/AdminService";
 import AddHotelModal   from "../components/AddHotelModal";
 import RoomStatusModal from "../components/RoomStatusModal";
+import AppToast        from "../components/AppToast";
+import { useToast }    from "../hooks/useToast";
 
 export default function AdminDashboard() {
   // ── Hotels list ───────────────────────────────────────
@@ -35,8 +32,7 @@ export default function AdminDashboard() {
   const [deleting,        setDeleting]        = useState(false);
 
   // ── Toast ─────────────────────────────────────────────
-  const [toast, setToast] = useState({ show: false, msg: "", variant: "success" });
-  const showToast = (msg, variant = "success") => setToast({ show: true, msg, variant });
+  const { toast, showToast, hideToast } = useToast();
 
   // ── Load hotels ───────────────────────────────────────
   const loadHotels = useCallback(async () => {
@@ -353,17 +349,7 @@ export default function AdminDashboard() {
       </Modal>
 
       {/* ── Toast ── */}
-      <ToastContainer position="bottom-end" className="p-3" style={{ zIndex: 9999 }}>
-        <Toast
-          show={toast.show}
-          onClose={() => setToast((t) => ({ ...t, show: false }))}
-          delay={4000}
-          autohide
-          bg={toast.variant}
-        >
-          <Toast.Body className="text-white fw-semibold">{toast.msg}</Toast.Body>
-        </Toast>
-      </ToastContainer>
+      <AppToast toast={toast} onClose={hideToast} />
     </div>
   );
 }
