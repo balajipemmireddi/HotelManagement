@@ -10,7 +10,7 @@ import {
   Image,
 } from "react-bootstrap";
 import { MOCK_HOTELS } from "../data/mockHotels";
-import RoomCategoryList from "../components/RoomCategoryList";
+import RoomSelector from "../components/RoomSelector";
 
 // Amenity display map
 const AMENITY_META = {
@@ -39,6 +39,10 @@ export default function HotelDetailsPage() {
 
   // Active gallery image index
   const [activeImg, setActiveImg] = useState(0);
+
+  // Lifted state from RoomSelector for sidebar total display
+  const [sidebarTotal, setSidebarTotal] = useState({ price: 0, rooms: 0 });
+  const handleTotalChange = (price, rooms) => setSidebarTotal({ price, rooms });
 
   // ── 404 state ────────────────────────────────────────
   if (!hotel) {
@@ -216,7 +220,7 @@ export default function HotelDetailsPage() {
             </Card>
 
             {/* ── Room Categories ── */}
-            <Card className="border-0 shadow-sm p-3" style={{ borderRadius: "10px" }}>
+            <Card className="border-0 shadow-sm p-3" style={{ borderRadius: "10px" }} data-room-list>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="fw-bold mb-0">Available Room Types</h5>
                 <Badge bg="light" text="dark" className="border">
@@ -242,12 +246,13 @@ export default function HotelDetailsPage() {
                 </div>
               )}
 
-              <RoomCategoryList
+              <RoomSelector
                 rooms={hotel.roomCategories}
                 hotelId={hotel.id}
                 checkIn={checkIn}
                 checkOut={checkOut}
                 guests={guests}
+                onTotalChange={handleTotalChange}
               />
             </Card>
           </Col>
@@ -267,13 +272,29 @@ export default function HotelDetailsPage() {
                 <hr />
 
                 {/* Price summary */}
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <span className="text-muted small">Starting from</span>
-                  <span className="fw-bold fs-4" style={{ color: "#0f3460" }}>
-                    ${hotel.priceFrom}
-                  </span>
-                </div>
-                <p className="text-muted small mb-3">per night · taxes not included</p>
+                {sidebarTotal.rooms > 0 ? (
+                  <>
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <span className="text-muted small">
+                        {sidebarTotal.rooms} {sidebarTotal.rooms === 1 ? "room" : "rooms"} selected
+                      </span>
+                      <span className="fw-bold fs-4" style={{ color: "#e94560" }}>
+                        ${sidebarTotal.price}
+                      </span>
+                    </div>
+                    <p className="text-muted small mb-3">per night · taxes not included</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <span className="text-muted small">Starting from</span>
+                      <span className="fw-bold fs-4" style={{ color: "#0f3460" }}>
+                        ${hotel.priceFrom}
+                      </span>
+                    </div>
+                    <p className="text-muted small mb-3">per night · taxes not included</p>
+                  </>
+                )}
 
                 {/* Quick date inputs */}
                 <div className="mb-2">
