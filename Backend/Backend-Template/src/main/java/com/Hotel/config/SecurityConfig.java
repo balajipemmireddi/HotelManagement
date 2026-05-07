@@ -49,6 +49,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/login", "/register")
                         .permitAll()
+                        // Public hotel browsing — no token required
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/hotels", "/api/hotels/**")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())
 
