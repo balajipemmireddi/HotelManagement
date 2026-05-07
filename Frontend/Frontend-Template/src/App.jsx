@@ -9,8 +9,10 @@ import SignupPage from "./pages/SignupPage";
 import DashBoard from "./pages/DashBoard";
 import AdminDashboard from "./pages/AdminDashboard";
 
-// ── Phase 2+ stubs (will be replaced as phases complete) ──
-// import HotelListPage from "./pages/HotelListPage";
+// ── Phase 2 ──
+import HotelListPage from "./pages/HotelListPage";
+
+// ── Phase 4+ stubs (will be replaced as phases complete) ──
 // import HotelDetailsPage from "./pages/HotelDetailsPage";
 // import BookingPage from "./pages/BookingPage";
 // import BookingConfirmPage from "./pages/BookingConfirmPage";
@@ -39,7 +41,7 @@ export default function App() {
           <Route path="/signup" element={<SignupPage />} />
 
           {/* ── Phase 2: Hotel Listing ── */}
-          <Route path="/hotels" element={<ComingSoon page="Hotel Listing" />} />
+          <Route path="/hotels" element={<HotelListPage />} />
 
           {/* ── Phase 4: Hotel Details ── */}
           <Route path="/hotels/:id" element={<ComingSoon page="Hotel Details" />} />
