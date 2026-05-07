@@ -1,20 +1,19 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Container,
   Row,
   Col,
   Form,
-  InputGroup,
   Button,
   Badge,
   Spinner,
+  Offcanvas,
 } from "react-bootstrap";
-import { useSearchParams } from "react-router-dom";
 import HotelCard from "../components/HotelCard";
+import SearchBar from "../components/SearchBar";
+import FilterSidebar from "../components/FilterSidebar";
+import { useHotelFilters } from "../hooks/useHotelFilters";
 import { MOCK_HOTELS } from "../data/mockHotels";
-
-// Unique cities derived from mock data for the city filter dropdown
-const CITIES = ["All Cities", ...new Set(MOCK_HOTELS.map((h) => h.city))];
 
 // Sort options
 const SORT_OPTIONS = [
@@ -25,25 +24,51 @@ const SORT_OPTIONS = [
   { value: "stars_asc",  label: "Stars: Low → High" },
 ];
 
+// Parse a "min-max" price range string into { min, max }
+function parsePriceRange(str) {
+  if (!str || str === "0-Infinity") return { min: 0, max: Infinity };
+  const [min, max] = str.split("-");
+  return { min: Number(min), max: max === "Infinity" ? Infinity : Number(max) };
+}
+
 export default function HotelListPage() {
-  const [searchParams] = useSearchParams();
+  const { filters, setFilter, applySearch, clearAll, activeCount } = useHotelFilters();
 
-  // ── Filter state ──────────────────────────────────────
-  const [search, setSearch]   = useState("");
-  const [city, setCity]       = useState(searchParams.get("city") || "All Cities");
-  const [minStars, setMinStars] = useState(0);
-  const [sortBy, setSortBy]   = useState("default");
+  // Mobile: offcanvas sidebar visibility
+  const [showSidebar, setShowSidebar] = useState(false);
 
-  // Simulate a brief loading state on first render (will be real API call in Phase 10)
+  // SearchBar local state (committed to URL on Search click)
+  const [searchDraft, setSearchDraft] = useState({
+    location: filters.location,
+    checkIn:  filters.checkIn,
+    checkOut: filters.checkOut,
+    guests:   filters.guests || "1",
+  });
+
+  const handleSearchChange = (field, value) => {
+    setSearchDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSearch = () => {
+    applySearch({
+      location: searchDraft.location,
+      checkIn:  searchDraft.checkIn,
+      checkOut: searchDraft.checkOut,
+      guests:   searchDraft.guests,
+    });
+  };
+
+  // Simulate loading (will be real API state in Phase 10)
   const [loading] = useState(false);
 
   // ── Derived filtered + sorted list ───────────────────
   const filtered = useMemo(() => {
     let list = [...MOCK_HOTELS];
+    const { min: priceMin, max: priceMax } = parsePriceRange(filters.priceRange);
 
-    // Text search — matches name or city
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    // Location text search — matches name or city
+    if (filters.location.trim()) {
+      const q = filters.location.toLowerCase();
       list = list.filter(
         (h) =>
           h.name.toLowerCase().includes(q) ||
@@ -51,18 +76,31 @@ export default function HotelListPage() {
       );
     }
 
-    // City filter
-    if (city && city !== "All Cities") {
-      list = list.filter((h) => h.city === city);
+    // Price range
+    if (priceMin > 0 || priceMax < Infinity) {
+      list = list.filter(
+        (h) => h.priceFrom >= priceMin && h.priceFrom <= priceMax
+      );
     }
 
-    // Minimum star rating
-    if (minStars > 0) {
-      list = list.filter((h) => h.starRating >= minStars);
+    // Star rating (multi-select — show if hotel matches ANY selected star)
+    if (filters.stars.size > 0) {
+      list = list.filter((h) => filters.stars.has(h.starRating));
+    }
+
+    // Amenities — mock: hotels with higher star ratings have more amenities.
+    // In Phase 10 this will filter against real amenity data from the API.
+    if (filters.amenities.size > 0) {
+      const amenityStarMap = { wifi: 1, parking: 2, pool: 3, gym: 3, restaurant: 3, bar: 4, spa: 4, breakfast: 3 };
+      list = list.filter((h) =>
+        [...filters.amenities].every(
+          (a) => h.starRating >= (amenityStarMap[a] ?? 1)
+        )
+      );
     }
 
     // Sort
-    switch (sortBy) {
+    switch (filters.sort) {
       case "price_asc":
         list.sort((a, b) => a.priceFrom - b.priceFrom);
         break;
@@ -80,159 +118,161 @@ export default function HotelListPage() {
     }
 
     return list;
-  }, [search, city, minStars, sortBy]);
+  }, [filters]);
 
-  // ── Clear all filters ─────────────────────────────────
-  const clearFilters = () => {
-    setSearch("");
-    setCity("All Cities");
-    setMinStars(0);
-    setSortBy("default");
-  };
-
-  const hasActiveFilters =
-    search.trim() || city !== "All Cities" || minStars > 0 || sortBy !== "default";
+  const hasActiveSearch =
+    filters.location || filters.checkIn || filters.checkOut;
 
   return (
     <div style={{ backgroundColor: "#f8f9fa", minHeight: "100vh" }}>
-      {/* ── Page Header ── */}
+
+      {/* ── Page Header + SearchBar ── */}
       <div
         style={{
           background: "linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%)",
-          padding: "48px 0 32px",
+          padding: "40px 0 32px",
         }}
       >
         <Container>
           <h1 className="text-white fw-bold mb-1">Browse Hotels</h1>
-          <p className="mb-0" style={{ color: "rgba(255,255,255,0.65)" }}>
+          <p className="mb-4" style={{ color: "rgba(255,255,255,0.65)" }}>
             {MOCK_HOTELS.length} hotels available worldwide
           </p>
+
+          {/* SearchBar sits inside the hero */}
+          <div
+            className="bg-white rounded p-3 shadow"
+            style={{ borderRadius: "12px" }}
+          >
+            <SearchBar
+              values={searchDraft}
+              onChange={handleSearchChange}
+              onSearch={handleSearch}
+            />
+          </div>
         </Container>
       </div>
 
       <Container className="py-4">
-        {/* ── Filter Bar ── */}
-        <Row className="g-2 mb-4 align-items-end">
-          {/* Search input */}
-          <Col xs={12} md={4}>
-            <Form.Label className="small fw-semibold text-muted mb-1">
-              Search
-            </Form.Label>
-            <InputGroup>
-              <InputGroup.Text className="bg-white border-end-0">
-                🔍
-              </InputGroup.Text>
-              <Form.Control
-                placeholder="Hotel name or city..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="border-start-0"
-              />
-            </InputGroup>
+        <Row className="g-4">
+
+          {/* ── Sidebar — desktop (always visible ≥ lg) ── */}
+          <Col lg={3} className="d-none d-lg-block">
+            <FilterSidebar
+              filters={filters}
+              onChange={setFilter}
+              onClear={clearAll}
+              count={activeCount}
+            />
           </Col>
 
-          {/* City filter */}
-          <Col xs={6} md={3}>
-            <Form.Label className="small fw-semibold text-muted mb-1">
-              City
-            </Form.Label>
-            <Form.Select value={city} onChange={(e) => setCity(e.target.value)}>
-              {CITIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Form.Select>
-          </Col>
+          {/* ── Main content ── */}
+          <Col xs={12} lg={9}>
 
-          {/* Min stars filter */}
-          <Col xs={6} md={2}>
-            <Form.Label className="small fw-semibold text-muted mb-1">
-              Min Stars
-            </Form.Label>
-            <Form.Select
-              value={minStars}
-              onChange={(e) => setMinStars(Number(e.target.value))}
-            >
-              <option value={0}>Any</option>
-              <option value={3}>3★ +</option>
-              <option value={4}>4★ +</option>
-              <option value={5}>5★ only</option>
-            </Form.Select>
-          </Col>
+            {/* Toolbar: results count + sort + mobile filter button */}
+            <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div className="d-flex align-items-center gap-2">
+                <span className="text-muted small">
+                  Showing{" "}
+                  <strong className="text-dark">{filtered.length}</strong>{" "}
+                  {filtered.length === 1 ? "hotel" : "hotels"}
+                </span>
+                {(activeCount > 0 || hasActiveSearch) && (
+                  <Badge bg="secondary" className="small">
+                    Filters active
+                  </Badge>
+                )}
+              </div>
 
-          {/* Sort */}
-          <Col xs={6} md={2}>
-            <Form.Label className="small fw-semibold text-muted mb-1">
-              Sort By
-            </Form.Label>
-            <Form.Select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Form.Select>
-          </Col>
+              <div className="d-flex gap-2 align-items-center">
+                {/* Sort dropdown */}
+                <Form.Select
+                  size="sm"
+                  style={{ width: "auto" }}
+                  value={filters.sort}
+                  onChange={(e) => setFilter("sort", e.target.value)}
+                >
+                  {SORT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Form.Select>
 
-          {/* Clear filters button */}
-          <Col xs={6} md={1} className="d-flex align-items-end">
-            {hasActiveFilters && (
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                className="w-100"
-                onClick={clearFilters}
-                title="Clear all filters"
-              >
-                ✕ Clear
-              </Button>
+                {/* Mobile: open filter sidebar */}
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  className="d-lg-none"
+                  onClick={() => setShowSidebar(true)}
+                >
+                  ⚙ Filters{activeCount > 0 && ` (${activeCount})`}
+                </Button>
+              </div>
+            </div>
+
+            {/* Hotel grid */}
+            {loading ? (
+              <div className="text-center py-5">
+                <Spinner animation="border" variant="secondary" />
+                <p className="text-muted mt-3">Loading hotels...</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-5 text-muted">
+                <div style={{ fontSize: "3rem" }}>🏨</div>
+                <h5 className="mt-3">No hotels found</h5>
+                <p className="small">Try adjusting your search or filters.</p>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={clearAll}
+                >
+                  Clear All Filters
+                </Button>
+              </div>
+            ) : (
+              <Row className="g-4">
+                {filtered.map((hotel) => (
+                  <Col key={hotel.id} xs={12} sm={6} xl={4}>
+                    <HotelCard hotel={hotel} />
+                  </Col>
+                ))}
+              </Row>
             )}
           </Col>
         </Row>
+      </Container>
 
-        {/* ── Results summary ── */}
-        <div className="d-flex align-items-center gap-2 mb-3">
-          <span className="text-muted small">
-            Showing{" "}
-            <strong className="text-dark">{filtered.length}</strong>{" "}
-            {filtered.length === 1 ? "hotel" : "hotels"}
-          </span>
-          {hasActiveFilters && (
-            <Badge bg="secondary" className="small">
-              Filters active
-            </Badge>
-          )}
-        </div>
-
-        {/* ── Hotel Grid ── */}
-        {loading ? (
-          <div className="text-center py-5">
-            <Spinner animation="border" variant="secondary" />
-            <p className="text-muted mt-3">Loading hotels...</p>
+      {/* ── Mobile Offcanvas Sidebar ── */}
+      <Offcanvas
+        show={showSidebar}
+        onHide={() => setShowSidebar(false)}
+        placement="start"
+        style={{ width: "300px" }}
+      >
+        <Offcanvas.Header closeButton>
+          <Offcanvas.Title className="fw-bold">Filters</Offcanvas.Title>
+        </Offcanvas.Header>
+        <Offcanvas.Body className="p-0">
+          <div className="p-3">
+            <FilterSidebar
+              filters={filters}
+              onChange={setFilter}
+              onClear={clearAll}
+              count={activeCount}
+            />
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-5 text-muted">
-            <div style={{ fontSize: "3rem" }}>🏨</div>
-            <h5 className="mt-3">No hotels found</h5>
-            <p className="small">Try adjusting your search or filters.</p>
-            <Button variant="outline-secondary" size="sm" onClick={clearFilters}>
-              Clear Filters
+          <div className="p-3 border-top">
+            <Button
+              className="w-100"
+              style={{ backgroundColor: "#e94560", border: "none" }}
+              onClick={() => setShowSidebar(false)}
+            >
+              Show {filtered.length} Results
             </Button>
           </div>
-        ) : (
-          <Row className="g-4">
-            {filtered.map((hotel) => (
-              <Col key={hotel.id} xs={12} sm={6} lg={4} xl={3}>
-                <HotelCard hotel={hotel} />
-              </Col>
-            ))}
-          </Row>
-        )}
-      </Container>
+        </Offcanvas.Body>
+      </Offcanvas>
     </div>
   );
 }
