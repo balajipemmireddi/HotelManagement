@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { registerUser } from "../services/UserService";
 import { Container, Card, Form, Button, Toast } from "react-bootstrap";
+import { Link } from "react-router-dom";
 
 export default function Signup() {
 
@@ -88,6 +89,13 @@ export default function Signup() {
             Register
           </Button>
         </Form>
+
+        <p className="text-center text-muted small mt-3 mb-0">
+          Already have an account?{" "}
+          <Link to="/login" className="text-decoration-none">
+            Login
+          </Link>
+        </p>
       </Card>
 
       {/* Toast */}

@@ -5,49 +5,67 @@ import { AuthContext } from "../context/authContext";
 
 export default function AppNavbar() {
   const navigate = useNavigate();
-
-  const { isAuthenticated, logout } = useContext(AuthContext);
+  const { isAuthenticated, role, logout } = useContext(AuthContext);
 
   const handleLogout = () => {
-    logout();          // from AuthProvider
+    logout();
     navigate("/login");
   };
 
   return (
-    <Navbar bg="dark" variant="dark" expand="lg">
+    <Navbar bg="dark" variant="dark" expand="lg" sticky="top">
       <Container>
-
-        {/* BRAND */}
-        <Navbar.Brand as={Link} to="/">
-          APP NAME
+        {/* Brand */}
+        <Navbar.Brand as={Link} to="/" className="fw-bold fs-5">
+          🏨 StayEase
         </Navbar.Brand>
 
-        <Navbar.Toggle />
+        <Navbar.Toggle aria-controls="main-navbar" />
 
-        <Navbar.Collapse className="justify-content-end">
-          <Nav className="align-items-center">
+        <Navbar.Collapse id="main-navbar">
+          {/* Left nav links */}
+          <Nav className="me-auto">
+            <Nav.Link as={Link} to="/">
+              Home
+            </Nav.Link>
+            <Nav.Link as={Link} to="/hotels">
+              Browse Hotels
+            </Nav.Link>
+          </Nav>
 
-            {/* NOT LOGGED IN */}
+          {/* Right auth links */}
+          <Nav className="align-items-center gap-2">
             {!isAuthenticated ? (
               <>
                 <Nav.Link as={Link} to="/login">
                   Login
                 </Nav.Link>
-
-                <Nav.Link as={Link} to="/signup">
-                  Signup
-                </Nav.Link>
+                <Button
+                  as={Link}
+                  to="/signup"
+                  variant="outline-light"
+                  size="sm"
+                >
+                  Sign Up
+                </Button>
               </>
             ) : (
-              /* LOGGED IN */
-              <Button variant="danger" onClick={handleLogout}>
-                Logout
-              </Button>
+              <>
+                {role === "ADMIN" && (
+                  <Nav.Link as={Link} to="/admin" className="text-warning">
+                    Admin Panel
+                  </Nav.Link>
+                )}
+                <Nav.Link as={Link} to="/dashboard">
+                  My Bookings
+                </Nav.Link>
+                <Button variant="danger" size="sm" onClick={handleLogout}>
+                  Logout
+                </Button>
+              </>
             )}
-
           </Nav>
         </Navbar.Collapse>
-
       </Container>
     </Navbar>
   );
