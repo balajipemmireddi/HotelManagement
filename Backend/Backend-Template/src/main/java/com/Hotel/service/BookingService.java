@@ -1,0 +1,266 @@
+package com.Hotel.service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.Hotel.dto.booking.BookingRequestDTO;
+import com.Hotel.dto.booking.BookingResponseDTO;
+import com.Hotel.entity.Booking;
+import com.Hotel.entity.BookingRoom;
+import com.Hotel.entity.Hotel;
+import com.Hotel.entity.Room;
+import com.Hotel.entity.RoomCategory;
+import com.Hotel.entity.Users;
+import com.Hotel.exception.ResourceNotFoundException;
+import com.Hotel.mapper.BookingMapper;
+import com.Hotel.repository.BookingRepo;
+import com.Hotel.repository.BookingRoomRepo;
+import com.Hotel.repository.HotelRepo;
+import com.Hotel.repository.RoomCategoryRepo;
+import com.Hotel.repository.UserRepo;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * PHASE 5 — Booking Service.
+ *
+ * Handles the critical booking creation process with atomic transactions.
+ * Ensures rooms are locked and booking is created or fails entirely.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class BookingService {
+
+    private final BookingRepo bookingRepo;
+    private final BookingRoomRepo bookingRoomRepo;
+    private final HotelRepo hotelRepo;
+    private final RoomCategoryRepo roomCategoryRepo;
+    private final UserRepo userRepo;
+    private final AvailabilityService availabilityService;
+    private final BookingMapper bookingMapper;
+
+    private final Random random = new Random();
+
+    /**
+     * POST /api/bookings — Create a new booking.
+     *
+     * ATOMIC TRANSACTION:
+     * 1. Validate hotel, dates, and user
+     * 2. For each room category request:
+     *    - Check availability
+     *    - Allocate specific rooms
+     * 3. Calculate pricing
+     * 4. Create Booking entity
+     * 5. Create BookingRoom entries
+     * 6. Save all (or rollback on failure)
+     *
+     * @param request Booking details (hotel, dates, rooms)
+     * @param userId  Authenticated user ID (from JWT token)
+     * @return BookingResponseDTO with booking reference and details
+     */
+    @Transactional
+    public BookingResponseDTO createBooking(BookingRequestDTO request, Long userId) {
+        log.info("Creating booking for user {} at hotel {}", userId, request.getHotelId());
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 1. Validate entities and dates
+        // ─────────────────────────────────────────────────────────────────────
+        Users user = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        Hotel hotel = hotelRepo.findByIdAndIsActiveTrue(request.getHotelId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Hotel not found or inactive with id: " + request.getHotelId()));
+
+        validateBookingDates(request.getCheckInDate(), request.getCheckOutDate());
+
+        int totalNights = (int) ChronoUnit.DAYS.between(
+                request.getCheckInDate(),
+                request.getCheckOutDate()
+        );
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 2. Allocate rooms for each category request
+        // ─────────────────────────────────────────────────────────────────────
+        List<RoomAllocation> allocations = new ArrayList<>();
+
+        for (BookingRequestDTO.RoomRequest roomReq : request.getRooms()) {
+            RoomCategory category = roomCategoryRepo.findById(roomReq.getCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Room category not found with id: " + roomReq.getCategoryId()));
+
+            // Verify category belongs to the requested hotel
+            if (!category.getHotel().getId().equals(request.getHotelId())) {
+                throw new IllegalArgumentException(
+                        "Room category " + roomReq.getCategoryId() +
+                        " does not belong to hotel " + request.getHotelId());
+            }
+
+            // Get available room IDs for this category and date range
+            List<Long> availableRoomIds = availabilityService.getAvailableRoomIds(
+                    roomReq.getCategoryId(),
+                    request.getCheckInDate(),
+                    request.getCheckOutDate()
+            );
+
+            // Check if enough rooms are available
+            if (availableRoomIds.size() < roomReq.getQuantity()) {
+                throw new IllegalStateException(
+                        "Insufficient availability for category '" + category.getCategoryName() +
+                        "'. Requested: " + roomReq.getQuantity() +
+                        ", Available: " + availableRoomIds.size());
+            }
+
+            // Allocate the first N available rooms
+            List<Long> selectedRoomIds = availableRoomIds.subList(0, roomReq.getQuantity());
+            allocations.add(new RoomAllocation(category, selectedRoomIds));
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 3. Calculate total pricing
+        // ─────────────────────────────────────────────────────────────────────
+        double totalAmount = 0.0;
+
+        for (RoomAllocation allocation : allocations) {
+            double categoryTotal = allocation.category.getBasePrice() *
+                                   totalNights *
+                                   allocation.roomIds.size();
+            totalAmount += categoryTotal;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 4. Create Booking entity
+        // ─────────────────────────────────────────────────────────────────────
+        String bookingReference = generateBookingReference();
+
+        Booking booking = Booking.builder()
+                .user(user)
+                .hotel(hotel)
+                .bookingReference(bookingReference)
+                .checkInDate(request.getCheckInDate())
+                .checkOutDate(request.getCheckOutDate())
+                .totalNights(totalNights)
+                .totalAmount(totalAmount)
+                .discountAmount(0.0) // Phase 7 will implement discount logic
+                .finalAmount(totalAmount)
+                .status(Booking.BookingStatus.PENDING)
+                .paymentStatus(Booking.PaymentStatus.PENDING)
+                .specialRequests(request.getSpecialRequests())
+                .build();
+
+        booking = bookingRepo.save(booking);
+        log.info("Booking created with reference: {}", bookingReference);
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 5. Create BookingRoom entries (lock specific rooms)
+        // ─────────────────────────────────────────────────────────────────────
+        List<BookingRoom> bookingRooms = new ArrayList<>();
+
+        for (RoomAllocation allocation : allocations) {
+            for (Long roomId : allocation.roomIds) {
+                Room room = new Room();
+                room.setId(roomId); // Lazy-loaded reference
+
+                BookingRoom bookingRoom = BookingRoom.builder()
+                        .booking(booking)
+                        .room(room)
+                        .roomCategory(allocation.category)
+                        .pricePerNight(allocation.category.getBasePrice())
+                        .numberOfNights(totalNights)
+                        .build();
+
+                bookingRooms.add(bookingRoom);
+            }
+        }
+
+        bookingRoomRepo.saveAll(bookingRooms);
+        booking.setBookingRooms(bookingRooms); // Update bidirectional relationship
+
+        log.info("Allocated {} rooms for booking {}", bookingRooms.size(), bookingReference);
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 6. Return response DTO
+        // ─────────────────────────────────────────────────────────────────────
+        return bookingMapper.toResponseDTO(booking);
+    }
+
+    /**
+     * Generates a unique booking reference in format: BK-YYYYMMDD-XXXX
+     * Example: BK-20260507-A3F9
+     *
+     * Retries up to 5 times if collision occurs (extremely rare).
+     */
+    private String generateBookingReference() {
+        String datePrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        int maxRetries = 5;
+
+        for (int i = 0; i < maxRetries; i++) {
+            String randomSuffix = generateRandomAlphanumeric(4);
+            String reference = "BK-" + datePrefix + "-" + randomSuffix;
+
+            if (!bookingRepo.existsByBookingReference(reference)) {
+                return reference;
+            }
+        }
+
+        // Fallback: append timestamp if all retries fail
+        String timestamp = String.valueOf(System.currentTimeMillis() % 10000);
+        return "BK-" + datePrefix + "-" + timestamp;
+    }
+
+    /**
+     * Generates a random alphanumeric string (uppercase).
+     */
+    private String generateRandomAlphanumeric(int length) {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Validates booking dates:
+     * - Check-out must be after check-in
+     * - Check-in cannot be in the past
+     * - Maximum stay duration: 30 nights
+     */
+    private void validateBookingDates(LocalDate checkIn, LocalDate checkOut) {
+        if (!checkOut.isAfter(checkIn)) {
+            throw new IllegalArgumentException("Check-out date must be after check-in date");
+        }
+
+        if (checkIn.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Check-in date cannot be in the past");
+        }
+
+        long nights = ChronoUnit.DAYS.between(checkIn, checkOut);
+        if (nights > 30) {
+            throw new IllegalArgumentException("Maximum stay duration is 30 nights");
+        }
+    }
+
+    /**
+     * Internal helper class to track room allocations during booking creation.
+     */
+    private static class RoomAllocation {
+        final RoomCategory category;
+        final List<Long> roomIds;
+
+        RoomAllocation(RoomCategory category, List<Long> roomIds) {
+            this.category = category;
+            this.roomIds = roomIds;
+        }
+    }
+}
