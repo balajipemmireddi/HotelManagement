@@ -75,6 +75,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/availability/**").permitAll()
                         // PHASE 7: Discount validation — public (POST)
                         .requestMatchers(HttpMethod.POST, "/api/discounts/validate").permitAll()
+                        // PHASE 11: Admin endpoints — ADMIN role required
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

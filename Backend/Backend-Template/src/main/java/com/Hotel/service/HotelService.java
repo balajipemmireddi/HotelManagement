@@ -2,6 +2,7 @@ package com.Hotel.service;
 
 import java.util.List;
 
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import com.Hotel.dto.hotel.HotelRequestDTO;
@@ -11,6 +12,7 @@ import com.Hotel.entity.Hotel;
 import com.Hotel.exception.ResourceNotFoundException;
 import com.Hotel.mapper.HotelMapper;
 import com.Hotel.repository.HotelRepo;
+import com.Hotel.specification.HotelSpecification;
 
 import lombok.RequiredArgsConstructor;
 
@@ -80,5 +82,24 @@ public class HotelService {
                         "Hotel not found with id: " + id));
         hotel.setIsActive(false);
         hotelRepo.save(hotel);
+    }
+
+    /**
+     * PHASE 9: Advanced hotel search with multiple filters.
+     * Uses JPA Specification for dynamic query building.
+     */
+    public List<HotelSummaryDTO> advancedSearch(
+            String city,
+            Integer minStarRating,
+            Integer maxStarRating,
+            Double minPrice,
+            Double maxPrice,
+            String name) {
+        
+        Specification<Hotel> spec = HotelSpecification.withFilters(
+                city, minStarRating, maxStarRating, minPrice, maxPrice, name);
+        
+        List<Hotel> hotels = hotelRepo.findAll(spec);
+        return hotelMapper.toSummaryDTOList(hotels);
     }
 }

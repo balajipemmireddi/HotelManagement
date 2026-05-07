@@ -49,6 +49,7 @@ public class BookingService {
     private final AvailabilityService availabilityService;
     private final BookingMapper bookingMapper;
     private final DiscountService discountService;
+    private final EmailService emailService;
 
     private final Random random = new Random();
 
@@ -234,7 +235,12 @@ public class BookingService {
         log.info("Allocated {} rooms for booking {}", bookingRooms.size(), bookingReference);
 
         // ─────────────────────────────────────────────────────────────────────
-        // 6. Return response DTO
+        // 6. PHASE 10: Send confirmation email (async)
+        // ─────────────────────────────────────────────────────────────────────
+        emailService.sendBookingConfirmation(booking);
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 7. Return response DTO
         // ─────────────────────────────────────────────────────────────────────
         return bookingMapper.toResponseDTO(booking);
     }
@@ -435,6 +441,9 @@ public class BookingService {
                 booking.getBookingReference(),
                 booking.getCheckInDate(),
                 booking.getCheckOutDate());
+
+        // PHASE 10: Send cancellation email (async)
+        emailService.sendCancellationEmail(booking);
 
         // Convert to DTO
         return bookingMapper.toResponseDTO(booking);

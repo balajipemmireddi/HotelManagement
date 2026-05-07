@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.Hotel.dto.hotel.HotelRequestDTO;
@@ -83,5 +84,24 @@ public class HotelController {
     public ResponseEntity<Void> deleteHotel(@PathVariable Long id) {
         hotelService.softDeleteHotel(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * PHASE 9: GET /api/hotels/search/advanced
+     * Public — advanced hotel search with multiple filters.
+     */
+    @GetMapping("/search/advanced")
+    public ResponseEntity<List<HotelSummaryDTO>> advancedSearch(
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) Integer minStarRating,
+            @RequestParam(required = false) Integer maxStarRating,
+            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(required = false) String name) {
+        
+        List<HotelSummaryDTO> results = hotelService.advancedSearch(
+                city, minStarRating, maxStarRating, minPrice, maxPrice, name);
+        
+        return ResponseEntity.ok(results);
     }
 }
