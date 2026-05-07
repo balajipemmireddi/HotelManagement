@@ -14,7 +14,22 @@ public class UserPrincipal implements UserDetails {
 
     public UserPrincipal(Users user) {
         this.user = user;
+    }
 
+    /**
+     * Get the user ID from the authenticated principal.
+     * Used by controllers to identify the current user.
+     */
+    public Long getId() {
+        return user.getId();
+    }
+
+    /**
+     * Get the full Users entity.
+     * Use sparingly — prefer getId() for most operations.
+     */
+    public Users getUser() {
+        return user;
     }
 
     @Override
