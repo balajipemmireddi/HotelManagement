@@ -263,7 +263,7 @@ export default function HotelDetailsPage() {
           <Col lg={4}>
             <Card
               className="border-0 shadow"
-              style={{ borderRadius: "12px", position: "sticky", top: "80px" }}
+              style={{ borderRadius: "12px", position: "sticky", top: "var(--sticky-top)" }}
             >
               <Card.Body className="p-4">
                 <h5 className="fw-bold mb-1">{hotel.name}</h5>

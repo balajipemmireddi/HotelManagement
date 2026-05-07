@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./components/MainLayout";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute, { GuestRoute } from "./components/ProtectedRoute";
 
 // ── Pages ──────────────────────────────────────────────
 import HomePage from "./pages/HomePage";
@@ -15,9 +15,12 @@ import HotelListPage from "./pages/HotelListPage";
 // ── Phase 4 ──
 import HotelDetailsPage from "./pages/HotelDetailsPage";
 
-// ── Phase 6-7 stubs (will be replaced as phases complete) ──
-// import BookingPage from "./pages/BookingPage";
-// import BookingConfirmPage from "./pages/BookingConfirmPage";
+// ── Phase 6 ──
+import BookingPage from "./pages/BookingPage";
+
+// ── Phase 7 ──
+import BookingConfirmPage  from "./pages/BookingConfirmPage";
+import BookingSuccessPage  from "./pages/BookingSuccessPage";
 
 // Temporary stub component for routes not yet implemented
 function ComingSoon({ page }) {
@@ -39,8 +42,8 @@ export default function App() {
         <Routes>
           {/* ── Public Routes ── */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/login"  element={<GuestRoute><LoginPage  /></GuestRoute>} />
+          <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
 
           {/* ── Phase 2: Hotel Listing ── */}
           <Route path="/hotels" element={<HotelListPage />} />
@@ -53,7 +56,7 @@ export default function App() {
             path="/booking"
             element={
               <ProtectedRoute>
-                <ComingSoon page="Booking" />
+                <BookingPage />
               </ProtectedRoute>
             }
           />
@@ -61,7 +64,15 @@ export default function App() {
             path="/booking/confirm"
             element={
               <ProtectedRoute>
-                <ComingSoon page="Booking Confirmation" />
+                <BookingConfirmPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/booking/success"
+            element={
+              <ProtectedRoute>
+                <BookingSuccessPage />
               </ProtectedRoute>
             }
           />
