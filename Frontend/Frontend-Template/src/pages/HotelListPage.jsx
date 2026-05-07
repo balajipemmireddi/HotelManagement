@@ -1,21 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
-  Container,
-  Row,
-  Col,
-  Form,
-  Button,
-  Badge,
-  Spinner,
-  Offcanvas,
+  Container, Row, Col, Form, Button,
+  Badge, Spinner, Alert, Offcanvas, Pagination,
 } from "react-bootstrap";
-import HotelCard from "../components/HotelCard";
-import SearchBar from "../components/SearchBar";
+import HotelCard    from "../components/HotelCard";
+import SearchBar    from "../components/SearchBar";
 import FilterSidebar from "../components/FilterSidebar";
 import { useHotelFilters } from "../hooks/useHotelFilters";
-import { MOCK_HOTELS } from "../data/mockHotels";
+import { searchHotels }    from "../services/HotelService";
 
-// Sort options
+const PAGE_SIZE = 9;
+
 const SORT_OPTIONS = [
   { value: "default",    label: "Default"           },
   { value: "price_asc",  label: "Price: Low → High" },
@@ -24,20 +19,18 @@ const SORT_OPTIONS = [
   { value: "stars_asc",  label: "Stars: Low → High" },
 ];
 
-// Parse a "min-max" price range string into { min, max }
-function parsePriceRange(str) {
-  if (!str || str === "0-Infinity") return { min: 0, max: Infinity };
-  const [min, max] = str.split("-");
-  return { min: Number(min), max: max === "Infinity" ? Infinity : Number(max) };
-}
-
 export default function HotelListPage() {
   const { filters, setFilter, applySearch, clearAll, activeCount } = useHotelFilters();
 
-  // Mobile: offcanvas sidebar visibility
-  const [showSidebar, setShowSidebar] = useState(false);
+  // ── API state ─────────────────────────────────────────
+  const [hotels,      setHotels]      = useState([]);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
+  const [currentPage, setCurrentPage] = useState(0);   // 0-indexed
+  const [totalPages,  setTotalPages]  = useState(1);
+  const [totalItems,  setTotalItems]  = useState(0);
 
-  // SearchBar local state (committed to URL on Search click)
+  // ── SearchBar draft (committed on Search click) ───────
   const [searchDraft, setSearchDraft] = useState({
     location: filters.location,
     checkIn:  filters.checkIn,
@@ -45,8 +38,35 @@ export default function HotelListPage() {
     guests:   filters.guests || "1",
   });
 
-  const handleSearchChange = (field, value) => {
-    setSearchDraft((prev) => ({ ...prev, [field]: value }));
+  // ── Mobile sidebar ────────────────────────────────────
+  const [showSidebar, setShowSidebar] = useState(false);
+
+  // ── Fetch from API / mock fallback ────────────────────
+  const fetchHotels = useCallback(async (page) => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await searchHotels(filters, page, PAGE_SIZE);
+      setHotels(result.content);
+      setTotalPages(result.totalPages);
+      setTotalItems(result.totalElements);
+      setCurrentPage(result.number);
+    } catch (err) {
+      setError(err.message || "Failed to load hotels.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]); // re-run whenever filters change
+
+  // Re-fetch when filters change; reset to page 0
+  useEffect(() => {
+    setCurrentPage(0);
+    fetchHotels(0);
+  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePageChange = (page) => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    fetchHotels(page);
   };
 
   const handleSearch = () => {
@@ -58,95 +78,70 @@ export default function HotelListPage() {
     });
   };
 
-  // Simulate loading (will be real API state in Phase 10)
-  const [loading] = useState(false);
+  const hasActiveSearch = filters.location || filters.checkIn || filters.checkOut;
 
-  // ── Derived filtered + sorted list ───────────────────
-  const filtered = useMemo(() => {
-    let list = [...MOCK_HOTELS];
-    const { min: priceMin, max: priceMax } = parsePriceRange(filters.priceRange);
+  // ── Pagination items ──────────────────────────────────
+  const buildPaginationItems = () => {
+    const items = [];
+    const maxVisible = 5;
+    let start = Math.max(0, currentPage - Math.floor(maxVisible / 2));
+    let end   = Math.min(totalPages - 1, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) start = Math.max(0, end - maxVisible + 1);
 
-    // Location text search — matches name or city
-    if (filters.location.trim()) {
-      const q = filters.location.toLowerCase();
-      list = list.filter(
-        (h) =>
-          h.name.toLowerCase().includes(q) ||
-          h.city.toLowerCase().includes(q)
+    items.push(
+      <Pagination.Prev
+        key="prev"
+        disabled={currentPage === 0}
+        onClick={() => handlePageChange(currentPage - 1)}
+      />
+    );
+    if (start > 0) {
+      items.push(<Pagination.Item key={0} onClick={() => handlePageChange(0)}>1</Pagination.Item>);
+      if (start > 1) items.push(<Pagination.Ellipsis key="e1" disabled />);
+    }
+    for (let i = start; i <= end; i++) {
+      items.push(
+        <Pagination.Item
+          key={i}
+          active={i === currentPage}
+          onClick={() => i !== currentPage && handlePageChange(i)}
+        >
+          {i + 1}
+        </Pagination.Item>
       );
     }
-
-    // Price range
-    if (priceMin > 0 || priceMax < Infinity) {
-      list = list.filter(
-        (h) => h.priceFrom >= priceMin && h.priceFrom <= priceMax
+    if (end < totalPages - 1) {
+      if (end < totalPages - 2) items.push(<Pagination.Ellipsis key="e2" disabled />);
+      items.push(
+        <Pagination.Item key={totalPages - 1} onClick={() => handlePageChange(totalPages - 1)}>
+          {totalPages}
+        </Pagination.Item>
       );
     }
-
-    // Star rating (multi-select — show if hotel matches ANY selected star)
-    if (filters.stars.size > 0) {
-      list = list.filter((h) => filters.stars.has(h.starRating));
-    }
-
-    // Amenities — mock: hotels with higher star ratings have more amenities.
-    // In Phase 10 this will filter against real amenity data from the API.
-    if (filters.amenities.size > 0) {
-      const amenityStarMap = { wifi: 1, parking: 2, pool: 3, gym: 3, restaurant: 3, bar: 4, spa: 4, breakfast: 3 };
-      list = list.filter((h) =>
-        [...filters.amenities].every(
-          (a) => h.starRating >= (amenityStarMap[a] ?? 1)
-        )
-      );
-    }
-
-    // Sort
-    switch (filters.sort) {
-      case "price_asc":
-        list.sort((a, b) => a.priceFrom - b.priceFrom);
-        break;
-      case "price_desc":
-        list.sort((a, b) => b.priceFrom - a.priceFrom);
-        break;
-      case "stars_desc":
-        list.sort((a, b) => b.starRating - a.starRating);
-        break;
-      case "stars_asc":
-        list.sort((a, b) => a.starRating - b.starRating);
-        break;
-      default:
-        break;
-    }
-
-    return list;
-  }, [filters]);
-
-  const hasActiveSearch =
-    filters.location || filters.checkIn || filters.checkOut;
+    items.push(
+      <Pagination.Next
+        key="next"
+        disabled={currentPage >= totalPages - 1}
+        onClick={() => handlePageChange(currentPage + 1)}
+      />
+    );
+    return items;
+  };
 
   return (
     <div style={{ backgroundColor: "#f8f9fa", minHeight: "100vh" }}>
 
-      {/* ── Page Header + SearchBar ── */}
-      <div
-        style={{
-          background: "linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%)",
-          padding: "40px 0 32px",
-        }}
-      >
+      {/* ── Hero + SearchBar ── */}
+      <div style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%)", padding: "40px 0 32px" }}>
         <Container>
           <h1 className="text-white fw-bold mb-1">Browse Hotels</h1>
           <p className="mb-4" style={{ color: "rgba(255,255,255,0.65)" }}>
-            {MOCK_HOTELS.length} hotels available worldwide
+            {loading ? "Searching..." : `${totalItems} hotel${totalItems !== 1 ? "s" : ""} found`}
           </p>
-
-          {/* SearchBar sits inside the hero */}
-          <div
-            className="bg-white rounded p-3 shadow"
-            style={{ borderRadius: "12px" }}
-          >
+          <div className="bg-white rounded p-3 shadow" style={{ borderRadius: "12px" }}>
             <SearchBar
               values={searchDraft}
-              onChange={handleSearchChange}
+              onChange={(field, value) => setSearchDraft((prev) => ({ ...prev, [field]: value }))}
               onSearch={handleSearch}
             />
           </div>
@@ -156,36 +151,28 @@ export default function HotelListPage() {
       <Container className="py-4">
         <Row className="g-4">
 
-          {/* ── Sidebar — desktop (always visible ≥ lg) ── */}
+          {/* ── Desktop sidebar ── */}
           <Col lg={3} className="d-none d-lg-block">
-            <FilterSidebar
-              filters={filters}
-              onChange={setFilter}
-              onClear={clearAll}
-              count={activeCount}
-            />
+            <FilterSidebar filters={filters} onChange={setFilter} onClear={clearAll} count={activeCount} />
           </Col>
 
           {/* ── Main content ── */}
           <Col xs={12} lg={9}>
 
-            {/* Toolbar: results count + sort + mobile filter button */}
+            {/* Toolbar */}
             <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
               <div className="d-flex align-items-center gap-2">
                 <span className="text-muted small">
-                  Showing{" "}
-                  <strong className="text-dark">{filtered.length}</strong>{" "}
-                  {filtered.length === 1 ? "hotel" : "hotels"}
+                  {loading
+                    ? "Loading..."
+                    : <>Showing <strong className="text-dark">{hotels.length}</strong> of <strong className="text-dark">{totalItems}</strong> hotels</>
+                  }
                 </span>
                 {(activeCount > 0 || hasActiveSearch) && (
-                  <Badge bg="secondary" className="small">
-                    Filters active
-                  </Badge>
+                  <Badge bg="secondary" className="small">Filters active</Badge>
                 )}
               </div>
-
               <div className="d-flex gap-2 align-items-center">
-                {/* Sort dropdown */}
                 <Form.Select
                   size="sm"
                   style={{ width: "auto" }}
@@ -193,13 +180,9 @@ export default function HotelListPage() {
                   onChange={(e) => setFilter("sort", e.target.value)}
                 >
                   {SORT_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
+                    <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </Form.Select>
-
-                {/* Mobile: open filter sidebar */}
                 <Button
                   variant="outline-secondary"
                   size="sm"
@@ -211,56 +194,65 @@ export default function HotelListPage() {
               </div>
             </div>
 
-            {/* Hotel grid */}
+            {/* Error */}
+            {error && (
+              <Alert variant="danger" dismissible onClose={() => setError("")} className="mb-3">
+                {error}
+              </Alert>
+            )}
+
+            {/* Loading */}
             {loading ? (
               <div className="text-center py-5">
                 <Spinner animation="border" variant="secondary" />
-                <p className="text-muted mt-3">Loading hotels...</p>
+                <p className="text-muted mt-3 small">Searching hotels...</p>
               </div>
-            ) : filtered.length === 0 ? (
+
+            /* Empty */
+            ) : hotels.length === 0 ? (
               <div className="text-center py-5 text-muted">
                 <div style={{ fontSize: "3rem" }}>🏨</div>
                 <h5 className="mt-3">No hotels found</h5>
                 <p className="small">Try adjusting your search or filters.</p>
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={clearAll}
-                >
+                <Button variant="outline-secondary" size="sm" onClick={clearAll}>
                   Clear All Filters
                 </Button>
               </div>
+
+            /* Grid */
             ) : (
-              <Row className="g-4">
-                {filtered.map((hotel) => (
-                  <Col key={hotel.id} xs={12} sm={6} xl={4}>
-                    <HotelCard hotel={hotel} />
-                  </Col>
-                ))}
-              </Row>
+              <>
+                <Row className="g-4 mb-4">
+                  {hotels.map((hotel) => (
+                    <Col key={hotel.id} xs={12} sm={6} xl={4}>
+                      <HotelCard hotel={hotel} />
+                    </Col>
+                  ))}
+                </Row>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="d-flex flex-column align-items-center gap-1">
+                    <Pagination className="mb-1">{buildPaginationItems()}</Pagination>
+                    <p className="text-muted small mb-0">
+                      Page {currentPage + 1} of {totalPages}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </Col>
         </Row>
       </Container>
 
-      {/* ── Mobile Offcanvas Sidebar ── */}
-      <Offcanvas
-        show={showSidebar}
-        onHide={() => setShowSidebar(false)}
-        placement="start"
-        style={{ width: "300px" }}
-      >
+      {/* ── Mobile Offcanvas ── */}
+      <Offcanvas show={showSidebar} onHide={() => setShowSidebar(false)} placement="start" style={{ width: "300px" }}>
         <Offcanvas.Header closeButton>
           <Offcanvas.Title className="fw-bold">Filters</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body className="p-0">
           <div className="p-3">
-            <FilterSidebar
-              filters={filters}
-              onChange={setFilter}
-              onClear={clearAll}
-              count={activeCount}
-            />
+            <FilterSidebar filters={filters} onChange={setFilter} onClear={clearAll} count={activeCount} />
           </div>
           <div className="p-3 border-top">
             <Button
@@ -268,7 +260,7 @@ export default function HotelListPage() {
               style={{ backgroundColor: "#e94560", border: "none" }}
               onClick={() => setShowSidebar(false)}
             >
-              Show {filtered.length} Results
+              Show {totalItems} Results
             </Button>
           </div>
         </Offcanvas.Body>
