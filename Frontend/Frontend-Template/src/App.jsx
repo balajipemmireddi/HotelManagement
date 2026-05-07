@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./components/MainLayout";
-import ProtectedRoute from "./components/ProtectedRoute";
+import ProtectedRoute, { GuestRoute } from "./components/ProtectedRoute";
 
 // ── Pages ──────────────────────────────────────────────
 import HomePage from "./pages/HomePage";
@@ -42,8 +42,8 @@ export default function App() {
         <Routes>
           {/* ── Public Routes ── */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/login"  element={<GuestRoute><LoginPage  /></GuestRoute>} />
+          <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
 
           {/* ── Phase 2: Hotel Listing ── */}
           <Route path="/hotels" element={<HotelListPage />} />

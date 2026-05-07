@@ -1,26 +1,38 @@
 import { useState } from "react";
 import { AuthContext } from "./authContext";
-import { getUser, getRole, logout as logoutUtil } from "../utils/authUtil";
-import { getToken } from "../utils/tokenHelper.js";
+import {
+  getUser,
+  getRole,
+  isAuthenticated as checkAuth,
+  logout as logoutUtil,
+} from "../utils/authUtil";
 
+/**
+ * AuthProvider — wraps the app and exposes auth state to all consumers.
+ *
+ * State is initialised from localStorage on mount so identity persists
+ * across page refreshes. The token expiry check in isAuthenticated()
+ * ensures an expired token never counts as a valid session.
+ */
 export const AuthProvider = ({ children }) => {
+  const [user,            setUser]            = useState(getUser);
+  const [role,            setRole]            = useState(getRole);
+  const [isAuthenticated, setIsAuthenticated] = useState(checkAuth);
 
-  const [user, setUser] = useState(getUser());
-  const [role, setRole] = useState(getRole());
-  const [isAuthenticated, setIsAuthenticated] = useState(!!getToken());
-
+  /**
+   * Call after saveAuthData() to sync React state with localStorage.
+   * Does NOT accept a token — reads from localStorage so there is a
+   * single source of truth.
+   */
   const login = () => {
     const userData = getUser();
-
-    console.log("LOGIN USER DATA:", userData);
-
     if (!userData) return;
-
     setUser(userData);
     setRole(userData.role);
     setIsAuthenticated(true);
   };
 
+  /** Clear all auth state and localStorage. */
   const logout = () => {
     logoutUtil();
     setUser(null);
@@ -29,15 +41,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        role,
-        isAuthenticated,
-        login,
-        logout
-      }}
-    >
+    <AuthContext.Provider value={{ user, role, isAuthenticated, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
